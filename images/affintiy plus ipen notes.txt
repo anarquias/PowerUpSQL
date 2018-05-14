@@ -1,0 +1,25 @@
+Scope Includes:
+•	Testing on up to 50 active systems and 3 web applications
+•	Up to 3 days of time-boxed testing
+•	Up to 3 days of analysis anticipated
+•	Focused pentesting on PCI segmentation - hold off on this, because they are changing the segmentation/jump hosts etc, remove deliveryable.
+•	Testing will occur from client facilities during normal business hours
+•	Off-site findings analysis, reporting, and quality assurance reviews are included
+•	Includes up to 1 round of remediation testing (within 60 days of the preliminary report)
+•	Intrusion Prevention System (IPS) exceptions must be put in place for NetSPI test systems to prevent delays
+Deliverables Include:
+•	CSV File
+•	PDF Report
+•	Client-facing Letter of Attestation
+
+
+schedule
+starting wedneds
+next wee codey
+
+cary.
+sadec.
+
+
+run the penetration test, validation test. - note.
+
