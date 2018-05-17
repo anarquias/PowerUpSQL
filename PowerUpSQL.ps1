@@ -3,7 +3,7 @@
         File: PowerUpSQL.ps1
         Author: Scott Sutherland (@_nullbind), NetSPI - 2016
         Major Contributors: Antti Rantasaari and Eric Gruber
-        Version: 1.103.3
+        Version: 1.103.5
         Description: PowerUpSQL is a PowerShell toolkit for attacking SQL Server.
         License: BSD 3-Clause
         Required Dependencies: PowerShell v.2
@@ -23,7 +23,7 @@
 # Reference: https://msdn.microsoft.com/en-us/library/ms188247.aspx
 # Reference: https://raw.githubusercontent.com/sqlcollaborative/dbatools/master/functions/SharedFunctions.ps1
 # Reference: https://blogs.msdn.microsoft.com/spike/2008/11/14/connectionstrings-mixing-usernames-and-windows-authentication-who-goes-first/
-Function  Get-SQLConnectionObject
+Function Get-SQLConnectionObject
 {
     <#
             .SYNOPSIS
@@ -36,6 +36,8 @@ Function  Get-SQLConnectionObject
             SQL Server credential.
             .PARAMETER Database
             Default database to connect to.
+            .PARAMETER AppName
+            Spoof the name of the application you are connecting to SQL Server with.
             .EXAMPLE
             PS C:\> Get-SQLConnectionObject -Username MySQLUser -Password MySQLPassword
 
@@ -84,6 +86,10 @@ Function  Get-SQLConnectionObject
         [String]$Database,
 
         [Parameter(Mandatory = $false,
+        HelpMessage = 'Spoof the name of the application your connecting to the server with.')]
+        [string]$AppName = "",
+
+        [Parameter(Mandatory = $false,
         HelpMessage = 'Connection timeout.')]
         [string]$TimeOut = 1
     )
@@ -105,6 +111,13 @@ Function  Get-SQLConnectionObject
         {
             $Database = 'Master'
         }
+
+        # Check appname was provided
+        if($AppName){
+            $AppNameString = ";Application Name=`"$AppName`""
+        }else{
+            $AppNameString = ""
+        }
     }
 
     Process
@@ -125,7 +138,7 @@ Function  Get-SQLConnectionObject
             $AuthenticationType = "Current Windows Credentials"
 
             # Set connection string
-            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;Integrated Security=SSPI;Connection Timeout=1"
+            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;Integrated Security=SSPI;Connection Timeout=1 $AppNameString"
         }
         
         # Set authentcation type - provided windows user
@@ -133,7 +146,7 @@ Function  Get-SQLConnectionObject
             $AuthenticationType = "Provided Windows Credentials"
 
             # Setup connection string 
-            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;Integrated Security=SSPI;uid=$Username;pwd=$Password;Connection Timeout=$TimeOut"
+            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;Integrated Security=SSPI;uid=$Username;pwd=$Password;Connection Timeout=$TimeOut $AppNameString"
         }
 
         # Set authentcation type - provided sql login
@@ -143,7 +156,7 @@ Function  Get-SQLConnectionObject
             $AuthenticationType = "Provided SQL Login"
 
             # Setup connection string 
-            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;User ID=$Username;Password=$Password;Connection Timeout=$TimeOut"
+            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;User ID=$Username;Password=$Password;Connection Timeout=$TimeOut $AppNameString"
         }
 
         # Return the connection object
@@ -482,11 +495,11 @@ Function  Get-SQLConnectionTestThreaded
 #  Get-SQLQuery
 # ----------------------------------
 # Author: Scott Sutherland
-Function  Get-SQLQuery
+Function Get-SQLQuery
 {
     <#
             .SYNOPSIS
-            Executes a query on target SQL servers.This
+            Executes a query on target SQL servers.
             .PARAMETER Username
             SQL Server or domain account to authenticate with.
             .PARAMETER Password
@@ -507,6 +520,8 @@ Function  Get-SQLQuery
             Number of concurrent threads.
             .PARAMETER Query
             Query to be executed on the SQL Server.
+            .PARAMETER AppName
+            Spoof the name of the application you are connecting to SQL Server with.
             .EXAMPLE
             PS C:\> Get-SQLQuery -Verbose -Instance "SQLSERVER1.domain.com\SQLExpress" -Query "Select @@version" -Threads 15
             .EXAMPLE
@@ -558,6 +573,10 @@ Function  Get-SQLQuery
         [switch]$SuppressVerbose,
 
         [Parameter(Mandatory = $false,
+        HelpMessage = 'Spoof the name of the application your connecting to the server with.')]
+        [string]$AppName = "",
+
+        [Parameter(Mandatory = $false,
         HelpMessage = 'Return error message if exists.')]
         [switch]$ReturnError
     )
@@ -574,12 +593,12 @@ Function  Get-SQLQuery
         if($DAC)
         {
             # Create connection object
-            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -DAC -Database $Database
+            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -DAC -Database $Database -AppName $AppName
         }
         else
         {
             # Create connection object
-            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -Database $Database
+            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -Database $Database -AppName $AppName
         }
 
         # Parse SQL Server instance name
