@@ -802,7 +802,7 @@ Function Register-SQLC2Agent
 	            INSERT dbo.C2Agents (servername) VALUES ('$env:COMPUTERNAME')
             ELSE
 	        UPDATE dbo.C2Agents SET lastcheckin = (select GETDATE ())
-            WHERE servername like 'env:COMPUTERNAME'"
+            WHERE servername like '$env:COMPUTERNAME'"
 
         # Execute Query
         $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
