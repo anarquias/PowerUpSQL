@@ -90,6 +90,10 @@ Function Get-SQLConnectionObject
             Default database to connect to.
             .PARAMETER AppName
             Spoof the name of the application you are connecting to SQL Server with.
+            .PARAMETER Encrypt
+            Use an encrypted connection.
+            .PARAMETER TrustServerCert
+            Trust the certificate of the remote server.
             .EXAMPLE
             PS C:\> Get-SQLConnectionObject -Username MySQLUser -Password MySQLPassword
 
@@ -139,7 +143,17 @@ Function Get-SQLConnectionObject
 
         [Parameter(Mandatory = $false,
         HelpMessage = 'Spoof the name of the application your connecting to the server with.')]
-        [string]$AppName = "Microsoft SQL Server Management Studio - Query",
+        [string]$AppName = "",
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Use an encrypted connection.')]
+        [ValidateSet("Yes","No","")]
+        [string]$Encrypt = "",
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Trust the certificate of the remote server.')]
+        [ValidateSet("Yes","No","")]
+        [string]$TrustServerCert = "",
 
         [Parameter(Mandatory = $false,
         HelpMessage = 'Connection timeout.')]
@@ -164,10 +178,25 @@ Function Get-SQLConnectionObject
             $Database = 'Master'
         }
 
+        # Check if appname was provided
         if($AppName){
             $AppNameString = ";Application Name=`"$AppName`""
         }else{
             $AppNameString = ""
+        }
+
+        # Check if encrypt was provided
+        if($Encrypt){
+            $EncryptString = ";Encrypt=Yes"
+        }else{
+            $EncryptString = ""
+        }
+
+        # Check appname was provided
+        if($TrustServerCert){
+            $TrustCertString = ";TrustServerCertificate=Yes"
+        }else{
+            $TrustCertString = ""
         }
     }
 
@@ -189,7 +218,7 @@ Function Get-SQLConnectionObject
             $AuthenticationType = "Current Windows Credentials"
 
             # Set connection string
-            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;Integrated Security=SSPI;Connection Timeout=1 $AppNameString"
+            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;Integrated Security=SSPI;Connection Timeout=1 $AppNameString $EncryptString $TrustCertString"
         }
         
         # Set authentcation type - provided windows user
@@ -197,7 +226,7 @@ Function Get-SQLConnectionObject
             $AuthenticationType = "Provided Windows Credentials"
 
             # Setup connection string 
-            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;Integrated Security=SSPI;uid=$Username;pwd=$Password;Connection Timeout=$TimeOut $AppNameString"
+            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;Integrated Security=SSPI;uid=$Username;pwd=$Password;Connection Timeout=$TimeOut$AppNameString$EncryptString$TrustCertString"
         }
 
         # Set authentcation type - provided sql login
@@ -207,7 +236,7 @@ Function Get-SQLConnectionObject
             $AuthenticationType = "Provided SQL Login"
 
             # Setup connection string 
-            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;User ID=$Username;Password=$Password;Connection Timeout=$TimeOut $AppNameString"
+            $Connection.ConnectionString = "Server=$DacConn$Instance;Database=$Database;User ID=$Username;Password=$Password;Connection Timeout=$TimeOut $AppNameString$EncryptString$TrustCertString"
         }
 
         # Return the connection object
@@ -251,6 +280,10 @@ Function Get-SQLQuery
             Query to be executed on the SQL Server.
             .PARAMETER AppName
             Spoof the name of the application you are connecting to SQL Server with.
+            .PARAMETER Encrypt
+            Use an encrypted connection.
+            .PARAMETER TrustServerCert
+            Trust the certificate of the remote server.
             .EXAMPLE
             PS C:\> Get-SQLQuery -Verbose -Instance "SQLSERVER1.domain.com\SQLExpress" -Query "Select @@version" -Threads 15
             .EXAMPLE
@@ -306,6 +339,16 @@ Function Get-SQLQuery
         [string]$AppName = "",
 
         [Parameter(Mandatory = $false,
+        HelpMessage = 'Use an encrypted connection.')]
+        [ValidateSet("Yes","No","")]
+        [string]$Encrypt = "",
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Trust the certificate of the remote server.')]
+        [ValidateSet("Yes","No","")]
+        [string]$TrustServerCert = "",
+
+        [Parameter(Mandatory = $false,
         HelpMessage = 'Return error message if exists.')]
         [switch]$ReturnError
     )
@@ -322,12 +365,12 @@ Function Get-SQLQuery
         if($DAC)
         {
             # Create connection object
-            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -DAC -Database $Database -AppName $AppName
+            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -DAC -Database $Database -AppName $AppName -Encrypt $Encrypt -TrustServerCert $TrustServerCert
         }
         else
         {
             # Create connection object
-            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -Database $Database -AppName $AppName
+            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -Database $Database -AppName $AppName -Encrypt $Encrypt -TrustServerCert $TrustServerCert
         }
 
         # Parse SQL Server instance name
