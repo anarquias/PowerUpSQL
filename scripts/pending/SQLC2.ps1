@@ -95,23 +95,23 @@ Function Get-SQLConnectionObject
             .PARAMETER TrustServerCert
             Trust the certificate of the remote server.
             .EXAMPLE
-            PS C:\> Get-SQLConnectionObject -Username MySQLUser -Password MySQLPassword
-
+            PS C:\> Get-SQLConnectionObject -Username myuser -Password mypass -Instance server1 -Encrypt Yes -TrustServerCert Yes -AppName "myapp"
             StatisticsEnabled                : False
-            AccessToken                      :
-            ConnectionString                 : Server=SQLServer1;Database=Master;User ID=MySQLUser;Password=MySQLPassword;Connection Timeout=1
+            AccessToken                      : 
+            ConnectionString                 : Server=server1;Database=Master;User ID=myuser;Password=mypass;Connection Timeout=1 ;Application 
+                                               Name="myapp";Encrypt=Yes;TrustServerCertificate=Yes
             ConnectionTimeout                : 1
             Database                         : Master
-            DataSource                       : SQLServer1
+            DataSource                       : server1
             PacketSize                       : 8000
             ClientConnectionId               : 00000000-0000-0000-0000-000000000000
-            ServerVersion                    :
+            ServerVersion                    : 
             State                            : Closed
-            WorkstationId                    : SQLServer1
-            Credential                       :
+            WorkstationId                    : Workstation1
+            Credential                       : 
             FireInfoMessageEventOnUserErrors : False
-            Site                             :
-            Container                        :
+            Site                             : 
+            Container                        : 
     #>
     [CmdletBinding()]
     Param(
@@ -192,7 +192,7 @@ Function Get-SQLConnectionObject
             $EncryptString = ""
         }
 
-        # Check appname was provided
+        # Check TrustServerCert was provided
         if($TrustServerCert){
             $TrustCertString = ";TrustServerCertificate=Yes"
         }else{
