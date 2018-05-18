@@ -55,6 +55,7 @@ Function Get-SQLConnectionObject
             ClientConnectionId               : 00000000-0000-0000-0000-000000000000
             ServerVersion                    : 
             State                            : Closed
+            WorkstationId                    : Workstation1
             Credential                       : 
             FireInfoMessageEventOnUserErrors : False
             Site                             : 
@@ -139,6 +140,7 @@ Function Get-SQLConnectionObject
             $EncryptString = ""
         }
 
+        # Check TrustServerCert was provided
         if($TrustServerCert){
             $TrustCertString = ";TrustServerCertificate=Yes"
         }else{
