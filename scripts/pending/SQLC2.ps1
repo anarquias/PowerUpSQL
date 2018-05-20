@@ -336,17 +336,17 @@ Function Get-SQLQuery
 
         [Parameter(Mandatory = $false,
         HelpMessage = 'Spoof the name of the application your connecting to the server with.')]
-        [string]$AppName = "",
+        [string]$AppName = "Microsoft SQL Server Management Studio - Query",
 
         [Parameter(Mandatory = $false,
         HelpMessage = 'Use an encrypted connection.')]
         [ValidateSet("Yes","No","")]
-        [string]$Encrypt = "",
+        [string]$Encrypt = "Yes",
 
         [Parameter(Mandatory = $false,
         HelpMessage = 'Trust the certificate of the remote server.')]
         [ValidateSet("Yes","No","")]
-        [string]$TrustServerCert = "",
+        [string]$TrustServerCert = "Yes",
 
         [Parameter(Mandatory = $false,
         HelpMessage = 'Return error message if exists.')]
@@ -629,7 +629,7 @@ Function Get-ComputerNameFromInstance
 #  Install-SQLC2
 # ----------------------------------
 # Author: Scott Sutherland
-Function Install-SQLC2
+Function Install-SQLC2Server
 {
     <#
             .SYNOPSIS
@@ -1312,7 +1312,7 @@ Function Get-SQLC2Command
                $C2Command = $_.command
                
                # Execute command                             
-               Invoke-SQLC2Command -Username $Username -Password $Password -Instance $Instance -Database $Database -Verbose -Command $C2Command -Cid $C2CommandId
+               Create-SQLC2Command -Username $Username -Password $Password -Instance $Instance -Database $Database -Verbose -Command $C2Command -Cid $C2CommandId
             }
         }else{
 
@@ -1324,10 +1324,10 @@ Function Get-SQLC2Command
 
 
 # ----------------------------------
-#  Invoke-SQLC2Command
+#  Create-SQLC2Command
 # ----------------------------------
 # Author: Scott Sutherland
-Function Invoke-SQLC2Command
+Function Create-SQLC2Command
 {
     <#
             .SYNOPSIS
@@ -1348,8 +1348,8 @@ Function Invoke-SQLC2Command
             .PARAMETER Command
             The OS command to run.
             .EXAMPLE
-            PS C:\> Invoke-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1
-            PS C:\> Invoke-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
+            PS C:\> Create-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1
+            PS C:\> Create-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
     #>
     [CmdletBinding()]
     Param(
@@ -1641,10 +1641,10 @@ Function Get-SQLC2Result
 
 
 # ----------------------------------
-#  Clear-SQLC2Command
+#  Remove-SQLC2Command
 # ----------------------------------
 # Author: Scott Sutherland
-Function Clear-SQLC2Command
+Function Remove-SQLC2Command
 {
     <#
             .SYNOPSIS
@@ -1664,11 +1664,11 @@ Function Clear-SQLC2Command
             .PARAMETER ServerName
             Server name to clear command history for.                               
             .EXAMPLE
-            PS C:\> Clear-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1
+            PS C:\> Remove-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1
             .EXAMPLE
-            PS C:\> Clear-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1 -ServerName Server1
+            PS C:\> Remove-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1 -ServerName Server1
             .EXAMPLE
-            PS C:\> Clear-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
+            PS C:\> Remove-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
     #>
     [CmdletBinding()]
     Param(
@@ -1767,10 +1767,10 @@ Function Clear-SQLC2Command
 
 
 # ----------------------------------
-#  Clear-SQLC2Agent
+#  Remove-SQLC2Agent
 # ----------------------------------
 # Author: Scott Sutherland
-Function Clear-SQLC2Agent
+Function Remove-SQLC2Agent
 {
     <#
             .SYNOPSIS
@@ -1790,11 +1790,11 @@ Function Clear-SQLC2Agent
             .PARAMETER ServerName
             Server name to clear command history for.                               
             .EXAMPLE
-            PS C:\> Clear-SQLC2Agent -Instance "SQLServer1\STANDARDDEV2014" -Database database1
+            PS C:\> Remove-SQLC2Agent -Instance "SQLServer1\STANDARDDEV2014" -Database database1
             .EXAMPLE
-            PS C:\> Clear-SQLC2Agent -Instance "SQLServer1\STANDARDDEV2014" -Database database1 -ServerName Server1
+            PS C:\> Remove-SQLC2Agent -Instance "SQLServer1\STANDARDDEV2014" -Database database1 -ServerName Server1
             .EXAMPLE
-            PS C:\> Clear-SQLC2Agent -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
+            PS C:\> Remove-SQLC2Agent -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
     #>
     [CmdletBinding()]
     Param(
